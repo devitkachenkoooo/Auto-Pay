@@ -1,0 +1,7 @@
+[tool.taskipy.tasks]
+lint = "ruff check . --fix && ruff format ."
+dev = "task lint && uvicorn app.main:app --reload"
+test = "pytest"
+mock = "python scripts/mock_sender.py"
+report = "python scripts/ai_reporter.py"
+gemini_models = "python scripts/list_gemini_models.py"

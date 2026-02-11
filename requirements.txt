@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+beanie
+motor
+pydantic
+pydantic-settings
+google-generativeai
+tenacity
+slowapi
+httpx
+python-dotenv
+taskipy
+pytest
+pytest-asyncio
