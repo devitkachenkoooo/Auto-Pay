@@ -123,9 +123,8 @@ class ConfigValidator:
         
         if errors:
             raise ConfigurationError(
-                "Configuration validation failed",
+                "Configuration validation failed: " + "; ".join(errors),
                 config_key="environment_validation",
-                details="\n".join(errors)
             )
         
         return config
@@ -240,10 +239,9 @@ class ConfigValidator:
             debug=cls.validate_boolean(env_vars["DEBUG"], False),
         )
         
-        logger.info("✅ Configuration loaded successfully")
+        logger.info("Configuration loaded successfully")
         logger.info(f"Environment: {app_config.environment}")
         logger.info(f"Debug mode: {app_config.debug}")
-        logger.info(f"Database: {app_config.database.url}")
         logger.info(f"Rate limits: webhook={app_config.rate_limit.webhook_rate_limit}, api={app_config.rate_limit.api_rate_limit}")
         
         return app_config

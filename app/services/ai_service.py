@@ -1,3 +1,13 @@
+"""
+AI service for analyzing transactions using Google Gemini.
+
+Fixes applied:
+    - Replaced deprecated asyncio.get_event_loop() with asyncio.get_running_loop()
+    - Narrowed retry scope (only retries on transient errors, not all exceptions)
+    - Error wrapping no longer exposes raw SDK exception messages to callers
+    - Removed emoji from log messages
+"""
+
 import os
 import logging
 import asyncio
@@ -10,47 +20,37 @@ from tenacity import (
     retry_if_exception_type,
 )
 from app.models import Transaction
-from app.core.exceptions import BaseAppError, DatabaseError
+from app.core.exceptions import BaseAppError
 
 logger = logging.getLogger(__name__)
 
 
 class AIService:
-    """AI service for analyzing transactions using Google Gemini (Updated SDK)"""
+    """AI service for analyzing transactions using Google Gemini"""
 
     def __init__(self):
-        """Initialize the AI service with the new Google GenAI client"""
+        """Initialize the AI service with the Google GenAI client"""
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
 
-        # Новий формат клієнта (версія SDK 2025-2026)
         self.client = genai.Client(api_key=self.api_key)
-        # Використовуємо актуальну стабільну модель
         self.model_id = "models/gemini-2.0-flash"
-        logger.info(f"✅ AI Service initialized with {self.model_id}")
+        logger.info(f"AI Service initialized with {self.model_id}")
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (Exception)
-        ),  # У новому SDK типи помилок можуть відрізнятися
-        reraise=True,  # Reraise original exception instead of RetryError
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+        reraise=True,
     )
     async def analyze_transactions(self, transactions: List[Transaction]) -> str:
-        """
-        Analyze transactions using Gemini AI with retry mechanism
-        """
+        """Analyze transactions using Gemini AI with retry mechanism."""
         try:
-            # Конвертація даних
             transaction_data = self._format_transactions_for_ai(transactions)
             prompt = self._create_analysis_prompt(transaction_data)
 
-            # У новому SDK для асинхронності краще використовувати run_in_executor
-            # або вбудовані методи, якщо вони доступні у вашій версії
-            # Для більшості випадків genai.Client працює через gRPC/REST
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
@@ -60,28 +60,31 @@ class AIService:
 
             # Defensive programming: Check response validity
             if response is None:
-                logger.error("❌ AI SDK returned None response")
+                logger.error("AI SDK returned None response")
                 return ""
 
-            if not hasattr(response, 'text'):
-                logger.error("❌ AI response missing 'text' attribute")
+            if not hasattr(response, "text"):
+                logger.error("AI response missing 'text' attribute")
                 return ""
 
-            # Safe text extraction
             result = response.text.strip() if response.text else ""
-            
-            logger.info(f"✅ Successfully analyzed {len(transactions)} transactions")
+
+            logger.info(f"Successfully analyzed {len(transactions)} transactions")
             return result
 
+        except BaseAppError:
+            raise
         except Exception as e:
-            logger.error(f"❌ Failed to analyze transactions: {str(e)}")
-            # Wrap SDK-specific errors as BaseAppError for consistent handling
-            raise BaseAppError(f"AI analysis failed: {str(e)}", "ai_service_analyze_transactions") from e
+            logger.error("Failed to analyze transactions", exc_info=True)
+            raise BaseAppError(
+                "AI analysis failed",
+                details="ai_service_analyze_transactions",
+            ) from e
 
     def _format_transactions_for_ai(
         self, transactions: List[Transaction]
     ) -> List[Dict[str, Any]]:
-        """Convert transaction objects to a format suitable for AI analysis"""
+        """Convert transaction objects to a format suitable for AI analysis."""
         formatted_data = []
         for tx in transactions:
             formatted_data.append(
@@ -99,7 +102,7 @@ class AIService:
         return formatted_data
 
     def _create_analysis_prompt(self, transaction_data: List[Dict[str, Any]]) -> str:
-        """Create a comprehensive prompt for transaction analysis"""
+        """Create a comprehensive prompt for transaction analysis."""
         total_amount = sum(tx["amount"] for tx in transaction_data)
         transaction_count = len(transaction_data)
         successful_tx = len(
@@ -133,7 +136,7 @@ class AIService:
     def _format_transactions_for_prompt(
         self, transaction_data: List[Dict[str, Any]]
     ) -> str:
-        """Format transaction data for inclusion in the AI prompt"""
+        """Format transaction data for inclusion in the AI prompt."""
         formatted_lines = []
         for i, tx in enumerate(transaction_data, 1):
             line = f"{i}. ID: {tx['id']}, Amount: ${tx['amount']:.2f}, "
@@ -147,21 +150,26 @@ class AIService:
         return "\n".join(formatted_lines)
 
     async def generate_daily_report(self, transactions: List[Transaction]) -> str:
-        """Generate a daily transaction report using AI"""
+        """Generate a daily transaction report using AI."""
         try:
             if not transactions:
-                return "📊 Daily Transaction Report\n\nNo transactions found for this period."
+                return "Daily Transaction Report\n\nNo transactions found for this period."
 
             analysis = await self.analyze_transactions(transactions)
 
-            report = "📊 DAILY TRANSACTION ANALYSIS REPORT\n"
+            report = "DAILY TRANSACTION ANALYSIS REPORT\n"
             report += "=" * 50 + "\n\n"
             report += analysis
             return report
 
+        except BaseAppError:
+            raise
         except Exception as e:
-            logger.error(f"❌ Failed to generate daily report: {str(e)}")
-            raise BaseAppError(f"Daily report generation failed: {str(e)}", "ai_service_generate_daily_report") from e
+            logger.error("Failed to generate daily report", exc_info=True)
+            raise BaseAppError(
+                "Daily report generation failed",
+                details="ai_service_generate_daily_report",
+            ) from e
 
 
 # Global AI service instance
@@ -169,7 +177,7 @@ ai_service = None
 
 
 def get_ai_service() -> AIService:
-    """Get or create the AI service instance"""
+    """Get or create the AI service instance."""
     global ai_service
     if ai_service is None:
         ai_service = AIService()

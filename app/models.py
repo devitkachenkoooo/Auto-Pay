@@ -1,4 +1,5 @@
 from beanie import Document, Indexed
+from pydantic import Field
 from datetime import datetime, timezone
 from typing import Optional
 
