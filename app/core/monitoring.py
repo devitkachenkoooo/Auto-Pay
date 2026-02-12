@@ -163,6 +163,7 @@ def setup_monitoring():
         handlers=[
             logging.StreamHandler(),
         ],
+        force=True,  # Override any existing configuration
     )
 
     # Ensure root logger doesn't double-log
@@ -171,7 +172,9 @@ def setup_monitoring():
         if not isinstance(handler, logging.StreamHandler):
             root_logger.removeHandler(handler)
 
-    logging.info(json.dumps({
+    # Use a dedicated logger to avoid conflicts
+    monitor_logger = logging.getLogger("auto_pay.monitor")
+    monitor_logger.info(json.dumps({
         "event": "system_startup",
         "message": "Monitoring initialized in Cloud-Native mode (STDOUT only)",
         "timestamp": datetime.now(timezone.utc).isoformat()

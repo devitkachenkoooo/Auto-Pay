@@ -12,19 +12,34 @@ from fastapi import APIRouter, Depends, Request
 from app.schemas.transaction import WebhookPayload
 from app.security import verify_hmac_signature
 from app.services.payment_service import PaymentService
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Get the limiter from app state
+def get_limiter(request: Request):
+    """Get rate limiter from app state"""
+    return request.app.state.limiter
+
 
 @router.post("/webhook/payment", dependencies=[Depends(verify_hmac_signature)])
 async def process_payment(request: Request, payload: WebhookPayload):
     """Main webhook endpoint for processing payments."""
-    result = await PaymentService.process_webhook(payload)
-    logger.info(f"Successfully processed webhook for transaction {payload.tx_id}")
-    return result
+    # Get limiter and apply rate limiting
+    limiter = get_limiter(request)
+    
+    # Create a wrapper function that accepts request for rate limiting
+    @limiter.limit("10/minute", key_func=get_remote_address)
+    async def rate_limited_endpoint(request: Request):
+        result = await PaymentService.process_webhook(payload)
+        logger.info(f"Successfully processed webhook for transaction {payload.tx_id}")
+        return result
+    
+    return await rate_limited_endpoint(request)
 
 
 @router.get("/transaction/{tx_id}")

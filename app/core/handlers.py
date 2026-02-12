@@ -24,21 +24,25 @@ async def app_exception_handler(request: Request, exc: BaseAppError) -> JSONResp
     - Logs full internal details (to_dict) for debugging.
     - Returns sanitized response (to_safe_dict) to the client.
     """
+    # Get exception details for logging, but avoid 'message' key conflict
+    exc_details = exc.to_dict()
+    log_details = {k: v for k, v in exc_details.items() if k != 'message'}
+    
     # Determine log level based on status code
     if exc.http_status_code >= 500:
         logger.error(
             f"[{exc.__class__.__name__}] {exc.message}",
-            extra=exc.to_dict(),
+            extra=log_details,
         )
     elif exc.http_status_code >= 400:
         logger.warning(
             f"[{exc.__class__.__name__}] {exc.message}",
-            extra=exc.to_dict(),
+            extra=log_details,
         )
     else:
         logger.info(
             f"[{exc.__class__.__name__}] {exc.message}",
-            extra=exc.to_dict(),
+            extra=log_details,
         )
 
     return JSONResponse(

@@ -43,11 +43,11 @@ class TransactionDetails(BaseModel):
     tx_id: str = Field(..., description="Transaction identifier")
     amount: Decimal = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Currency code")
-    sender_account: str = Field(..., description="Sender account")
-    receiver_account: str = Field(..., description="Receiver account")
-    status: str = Field(..., description="Transaction status")
+    sender_account: Optional[str] = Field(None, description="Sender account")
+    receiver_account: Optional[str] = Field(None, description="Receiver account")
+    status: Optional[str] = Field(None, description="Transaction status")
     description: Optional[str] = Field(None, description="Transaction description")
-    timestamp: datetime = Field(..., description="Transaction timestamp")
+    timestamp: Optional[datetime] = Field(None, description="Transaction timestamp")
 
 
 class TransactionResponse(ServiceResult):

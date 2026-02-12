@@ -44,6 +44,12 @@ class AIService:
         retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
         reraise=True,
     )
+    def _call_ai_model(self, prompt: str):
+        """Synchronous AI model call for use with retry mechanism."""
+        return self.client.models.generate_content(
+            model=self.model_id, contents=prompt
+        )
+
     async def analyze_transactions(self, transactions: List[Transaction]) -> str:
         """Analyze transactions using Gemini AI with retry mechanism."""
         try:
@@ -53,9 +59,8 @@ class AIService:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self.client.models.generate_content(
-                    model=self.model_id, contents=prompt
-                ),
+                self._call_ai_model,
+                prompt,
             )
 
             # Defensive programming: Check response validity

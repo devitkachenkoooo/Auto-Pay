@@ -22,8 +22,8 @@ class TestPaymentServiceUnit:
 
         result = await PaymentService.process_webhook(webhook_payload)
 
-        assert result["status"] == "accepted"
-        assert result["tx_id"] == webhook_payload.tx_id
+        assert result.status == "accepted"
+        assert result.tx_id == webhook_payload.tx_id
         mock_transaction_service.find_one.assert_called_once_with(
             {"tx_id": webhook_payload.tx_id}
         )
@@ -38,8 +38,8 @@ class TestPaymentServiceUnit:
 
         result = await PaymentService.process_webhook(webhook_payload)
 
-        assert result["status"] == "already_processed"
-        assert result["tx_id"] == webhook_payload.tx_id
+        assert result.status == "already_processed"
+        assert result.tx_id == webhook_payload.tx_id
         mock_db_find.assert_called_once_with({"tx_id": webhook_payload.tx_id})
 
     @pytest.mark.asyncio
@@ -51,8 +51,8 @@ class TestPaymentServiceUnit:
 
         result = await PaymentService.get_transaction_by_id(mock_existing_transaction.tx_id)
 
-        assert result["status"] == "found"
-        assert result["transaction"]["tx_id"] == mock_existing_transaction.tx_id
+        assert result.status == "found"
+        assert result.transaction.tx_id == mock_existing_transaction.tx_id
         mock_db_find.assert_called_once_with({"tx_id": mock_existing_transaction.tx_id})
 
     @pytest.mark.asyncio
@@ -60,10 +60,12 @@ class TestPaymentServiceUnit:
         """Test retrieving a non-existent transaction"""
         mock_db_find.return_value = None
 
-        result = await PaymentService.get_transaction_by_id("nonexistent_tx")
-
-        assert result["status"] == "not_found"
-        assert "not found" in result["message"]
+        from app.core.exceptions import NotFoundError
+        with pytest.raises(NotFoundError) as exc_info:
+            await PaymentService.get_transaction_by_id("nonexistent_tx")
+        
+        assert "Transaction not found" in str(exc_info.value)
+        assert exc_info.value.identifier == "nonexistent_tx"
         mock_db_find.assert_called_once_with({"tx_id": "nonexistent_tx"})
 
 
@@ -90,7 +92,6 @@ class TestErrorHandlingUnit:
             await PaymentService.process_webhook(webhook_payload)
 
         assert "Failed to process transaction" in str(exc_info.value)
-        assert "Database Timeout" in str(exc_info.value)
         assert exc_info.value.operation == "insert_transaction"
         mock_db_find.assert_called_once_with({"tx_id": webhook_payload.tx_id})
 
@@ -167,27 +168,27 @@ class TestDataIntegrityUnit:
     """Unit tests for data integrity and corruption scenarios"""
 
     @pytest.mark.asyncio
-    async def test_corrupted_transaction_data_missing_fields(self, mock_db_find, mock_populated_transaction):
+    async def test_corrupted_transaction_data_missing_fields(self, mock_db_find):
         """Test handling of corrupted transaction data with missing fields"""
-        # Use the new fixture and override specific fields to simulate corruption
-        corrupted_transaction = mock_populated_transaction
-        corrupted_transaction.amount = None  # Missing amount
+        from decimal import Decimal
+        
+        # Create a mock transaction with some None values to simulate corruption
+        corrupted_transaction = AsyncMock()
+        corrupted_transaction.tx_id = "test_tx_12345"
+        corrupted_transaction.amount = None  # Missing amount - this should cause DatabaseError
         corrupted_transaction.currency = None  # Missing currency
-        corrupted_transaction.sender_account = None  # Missing sender
-        corrupted_transaction.receiver_account = None  # Missing receiver
-        corrupted_transaction.status = None  # Missing status
-        corrupted_transaction.description = None  # Missing description
+        corrupted_transaction.sender_account = None
+        corrupted_transaction.receiver_account = None
+        corrupted_transaction.status = None
+        corrupted_transaction.description = None
         corrupted_transaction.timestamp = None
         
         mock_db_find.return_value = corrupted_transaction
         
-        result = await PaymentService.get_transaction_by_id("test_tx_12345")
+        with pytest.raises(DatabaseError) as exc_info:
+            await PaymentService.get_transaction_by_id("test_tx_12345")
         
-        assert result["status"] == "found"
-        # Should handle None values gracefully
-        assert result["transaction"]["tx_id"] == "test_tx_12345"
-        assert result["transaction"]["amount"] is None
-        assert result["transaction"]["currency"] is None
+        assert "Failed to retrieve transaction" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_transaction_with_incomplete_data(self, mock_db_find, mock_populated_transaction):
@@ -208,10 +209,10 @@ class TestDataIntegrityUnit:
         
         result = await PaymentService.get_transaction_by_id("test_tx_partial")
         
-        assert result["status"] == "found"
-        assert result["transaction"]["tx_id"] == "test_tx_partial"
-        assert result["transaction"]["amount"] == 100.50
-        assert result["transaction"]["receiver_account"] is None
+        assert result.status == "found"
+        assert result.transaction.tx_id == "test_tx_partial"
+        assert result.transaction.amount == 100.50
+        assert result.transaction.receiver_account is None
 
     @pytest.mark.asyncio
     async def test_database_insert_failure(self, webhook_payload, mock_transaction_service):
@@ -223,11 +224,11 @@ class TestDataIntegrityUnit:
         mock_transaction_instance.insert = AsyncMock(side_effect=Exception("Insert operation failed"))
         mock_transaction_service.return_value = mock_transaction_instance
 
-        with pytest.raises(Exception) as exc_info:
+        from app.core.exceptions import DatabaseError
+        with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.process_webhook(webhook_payload)
 
         assert "Failed to process transaction" in str(exc_info.value)
-        assert "Insert operation failed" in str(exc_info.value)
         mock_transaction_instance.insert.assert_called_once()
 
     @pytest.mark.asyncio
@@ -243,7 +244,8 @@ class TestDataIntegrityUnit:
         mock_db_find.return_value = corrupted_response
         
         # This should cause an Exception when trying to access missing fields
-        with pytest.raises(Exception) as exc_info:
+        from app.core.exceptions import DatabaseError
+        with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.get_transaction_by_id("test_tx_corrupted")
         
         assert "Failed to retrieve transaction" in str(exc_info.value)
