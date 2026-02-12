@@ -175,7 +175,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     def _should_log_body(self, request: Request) -> bool:
         """Determine if request body should be logged."""
         # Never log bodies for sensitive endpoints (webhooks contain secrets)
-        sensitive_paths = ["/webhook/payment", "/auth", "/login"]
+        sensitive_paths = ["/webhook", "/auth", "/login"]
 
         if any(request.url.path.startswith(path) for path in sensitive_paths):
             return False

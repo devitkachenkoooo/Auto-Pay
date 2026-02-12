@@ -50,7 +50,7 @@ class PaymentService:
                 return PaymentResponse(
                     success=True,
                     message="Transaction was previously processed",
-                    status="already_processed",
+                    status="duplicate",
                     tx_id=payload.tx_id
                 )
 
@@ -77,7 +77,7 @@ class PaymentService:
             return PaymentResponse(
                 success=True,
                 message="Transaction stored successfully",
-                status="accepted",
+                status="processed",
                 tx_id=payload.tx_id
             )
 

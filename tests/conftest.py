@@ -104,6 +104,16 @@ def webhook_payload():
 
 
 @pytest.fixture
+def valid_payload():
+    return dict(VALID_PAYLOAD)
+
+
+@pytest.fixture
+def invalid_payloads():
+    return create_invalid_webhook_payloads()
+
+
+@pytest.fixture
 def webhook_payloads():
     """Fixture providing various webhook payloads for testing"""
     return {

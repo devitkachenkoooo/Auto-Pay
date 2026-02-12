@@ -29,7 +29,7 @@ class PaymentResponse(ServiceResult):
     
     status: str = Field(
         ...,
-        description="Processing status: 'accepted', 'already_processed'"
+        description="Processing status: 'processed', 'duplicate', 'accepted', 'already_processed'"
     )
     tx_id: str = Field(
         ...,

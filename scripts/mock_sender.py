@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configuration
-WEBHOOK_URL = "http://localhost:8000/webhook/payment"
+WEBHOOK_URL = "http://localhost:8000/webhook"
 HMAC_SECRET = os.getenv("HMAC_SECRET_KEY")
 
 # Debug: Check if HMAC_SECRET is loaded
