@@ -14,6 +14,11 @@ from app.models import Transaction
 logger = logging.getLogger(__name__)
 
 
+class AIServiceError(Exception):
+    """Custom exception for AI service errors"""
+    pass
+
+
 class AIService:
     """AI service for analyzing transactions using Google Gemini (Updated SDK)"""
 
@@ -35,6 +40,7 @@ class AIService:
         retry=retry_if_exception_type(
             (Exception)
         ),  # У новому SDK типи помилок можуть відрізнятися
+        reraise=True,  # Reraise original exception instead of RetryError
     )
     async def analyze_transactions(self, transactions: List[Transaction]) -> str:
         """
@@ -56,12 +62,25 @@ class AIService:
                 ),
             )
 
+            # Defensive programming: Check response validity
+            if response is None:
+                logger.error("❌ AI SDK returned None response")
+                return ""
+
+            if not hasattr(response, 'text'):
+                logger.error("❌ AI response missing 'text' attribute")
+                return ""
+
+            # Safe text extraction
+            result = response.text.strip() if response.text else ""
+            
             logger.info(f"✅ Successfully analyzed {len(transactions)} transactions")
-            return response.text
+            return result
 
         except Exception as e:
             logger.error(f"❌ Failed to analyze transactions: {str(e)}")
-            raise Exception(f"AI analysis failed: {str(e)}")
+            # Wrap SDK-specific errors as AIServiceError
+            raise AIServiceError(f"AI analysis failed: {str(e)}") from e
 
     def _format_transactions_for_ai(
         self, transactions: List[Transaction]
@@ -146,7 +165,7 @@ class AIService:
 
         except Exception as e:
             logger.error(f"❌ Failed to generate daily report: {str(e)}")
-            raise Exception(f"Daily report generation failed: {str(e)}")
+            raise AIServiceError(f"Daily report generation failed: {str(e)}") from e
 
 
 # Global AI service instance
