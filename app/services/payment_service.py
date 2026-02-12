@@ -1,7 +1,9 @@
 from typing import Dict, Any
 from app.models import Transaction
 from app.schemas.transaction import WebhookPayload
+from app.core.exceptions import PaymentValidationError, IdempotencyError, DatabaseError
 import logging
+from pymongo.errors import DuplicateKeyError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +25,13 @@ class PaymentService:
             Dict with processing status and details
 
         Raises:
-            Exception: If database operations fail
+            PaymentValidationError: If payment data fails validation
+            IdempotencyError: If transaction already exists
+            DatabaseError: If database operations fail
         """
+        # Defensive validation
+        PaymentService._validate_payment_data(payload)
+        
         try:
             # Check for existing transaction (idempotency)
             existing_tx = await Transaction.find_one({"tx_id": payload.tx_id})
@@ -48,8 +55,13 @@ class PaymentService:
                 description=payload.description,
             )
 
-            # Save to database
-            await new_transaction.insert()
+            # Save to database with atomic operation
+            try:
+                await new_transaction.insert()
+            except DuplicateKeyError:
+                # Handle race condition where another process inserted the same tx_id
+                logger.info(f"Duplicate transaction detected: {payload.tx_id}")
+                raise IdempotencyError(payload.tx_id)
 
             logger.info(f"Successfully processed transaction {payload.tx_id}")
             return {
@@ -58,9 +70,15 @@ class PaymentService:
                 "message": "Transaction stored successfully",
             }
 
+        except DuplicateKeyError:
+            # Re-raise as IdempotencyError for consistent handling
+            raise IdempotencyError(payload.tx_id)
+        except IdempotencyError:
+            # Re-raise IdempotencyError
+            raise
         except Exception as e:
-            logger.error(f"Error processing transaction {payload.tx_id}: {str(e)}")
-            raise Exception(f"Failed to process transaction: {str(e)}")
+            logger.error(f"Database error processing transaction {payload.tx_id}: {str(e)}")
+            raise DatabaseError(f"Failed to process transaction: {str(e)}", "insert_transaction")
 
     @staticmethod
     async def get_transaction_by_id(tx_id: str) -> Dict[str, Any]:
@@ -97,5 +115,57 @@ class PaymentService:
             }
 
         except Exception as e:
-            logger.error(f"Error retrieving transaction {tx_id}: {str(e)}")
-            raise Exception(f"Failed to retrieve transaction: {str(e)}")
+            logger.error(f"Database error retrieving transaction {tx_id}: {str(e)}")
+            raise DatabaseError(f"Failed to retrieve transaction: {str(e)}", "find_transaction")
+    
+    @staticmethod
+    def _validate_payment_data(payload: WebhookPayload) -> None:
+        """
+        Validate payment data with business rules
+        
+        Args:
+            payload: Webhook payload to validate
+            
+        Raises:
+            PaymentValidationError: If validation fails
+        """
+        # Validate transaction ID
+        if not payload.tx_id or not payload.tx_id.strip():
+            raise PaymentValidationError(
+                "Transaction ID cannot be empty", 
+                "tx_id"
+            )
+        
+        # Validate amount
+        if payload.amount <= 0:
+            raise PaymentValidationError(
+                "Transaction amount must be positive", 
+                "amount"
+            )
+        
+        # Validate currency
+        if not payload.currency or not payload.currency.strip():
+            raise PaymentValidationError(
+                "Currency cannot be empty", 
+                "currency"
+            )
+        
+        # Validate account numbers
+        if not payload.sender_account or not payload.sender_account.strip():
+            raise PaymentValidationError(
+                "Sender account cannot be empty", 
+                "sender_account"
+            )
+        
+        if not payload.receiver_account or not payload.receiver_account.strip():
+            raise PaymentValidationError(
+                "Receiver account cannot be empty", 
+                "receiver_account"
+            )
+        
+        # Additional business rule: sender and receiver should be different
+        if payload.sender_account == payload.receiver_account:
+            raise PaymentValidationError(
+                "Sender and receiver accounts must be different", 
+                "accounts"
+            )

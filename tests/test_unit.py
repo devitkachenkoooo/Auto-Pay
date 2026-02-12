@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.payment_service import PaymentService
+from app.core.exceptions import PaymentValidationError, DatabaseError
 
 
 class TestPaymentServiceUnit:
@@ -74,21 +75,23 @@ class TestErrorHandlingUnit:
         """Test handling of database errors"""
         mock_db_find.side_effect = Exception("Database connection failed")
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.process_webhook(webhook_payload)
 
         assert "Failed to process transaction" in str(exc_info.value)
+        assert exc_info.value.operation == "insert_transaction"
 
     @pytest.mark.asyncio
     async def test_database_timeout_handling(self, webhook_payload, mock_db_find):
         """Test handling of database timeout scenarios"""
         mock_db_find.side_effect = Exception("Database Timeout")
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.process_webhook(webhook_payload)
 
         assert "Failed to process transaction" in str(exc_info.value)
         assert "Database Timeout" in str(exc_info.value)
+        assert exc_info.value.operation == "insert_transaction"
         mock_db_find.assert_called_once_with({"tx_id": webhook_payload.tx_id})
 
 
@@ -96,117 +99,78 @@ class TestEdgeCasesUnit:
     """Unit tests for edge cases and boundary conditions"""
 
     @pytest.mark.asyncio
-    async def test_empty_transaction_id(self, mock_transaction_service):
-        """Test processing with empty tx_id"""
+    async def test_empty_transaction_id(self, webhook_payloads):
+        """Test processing with empty tx_id should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
+        from pydantic import ValidationError
         
-        # Create payload with empty tx_id
-        empty_payload = WebhookPayload(
-            tx_id="",
-            amount=100.50,
-            currency="USD",
-            sender_account="ACC123456",
-            receiver_account="ACC789012",
-            description="Test payment"
-        )
+        # Use the helper function to create invalid payload
+        # This should now fail at Pydantic schema validation level
+        with pytest.raises(ValidationError) as exc_info:
+            WebhookPayload(**webhook_payloads["invalid"]["empty_tx_id"])
         
-        mock_transaction_service.find_one = AsyncMock(return_value=None)
-        mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock()
-        mock_transaction_service.return_value = mock_transaction_instance
-
-        result = await PaymentService.process_webhook(empty_payload)
-
-        assert result["status"] == "accepted"
-        assert result["tx_id"] == ""
-        mock_transaction_service.find_one.assert_called_once_with({"tx_id": ""})
+        # Check that it's a string validation error
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "string_too_short" for error in errors)
+        assert any(error["loc"] == ("tx_id",) for error in errors)
 
     @pytest.mark.asyncio
-    async def test_negative_amount(self, mock_transaction_service):
-        """Test processing with negative amount"""
+    async def test_negative_amount(self, webhook_payloads):
+        """Test processing with negative amount should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
+        from pydantic import ValidationError
         
-        # Create payload with negative amount
-        negative_payload = WebhookPayload(
-            tx_id="test_tx_negative",
-            amount=-100.50,
-            currency="USD",
-            sender_account="ACC123456",
-            receiver_account="ACC789012",
-            description="Test payment with negative amount"
-        )
+        # Use the helper function to create invalid payload
+        # This should now fail at Pydantic schema validation level
+        with pytest.raises(ValidationError) as exc_info:
+            WebhookPayload(**webhook_payloads["invalid"]["negative_amount"])
         
-        mock_transaction_service.find_one = AsyncMock(return_value=None)
-        mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock()
-        mock_transaction_service.return_value = mock_transaction_instance
-
-        result = await PaymentService.process_webhook(negative_payload)
-
-        assert result["status"] == "accepted"
-        assert result["tx_id"] == "test_tx_negative"
-        mock_transaction_instance.insert.assert_called_once()
+        # Check that it's a greater_than validation error
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "greater_than" for error in errors)
+        assert any(error["loc"] == ("amount",) for error in errors)
 
     @pytest.mark.asyncio
-    async def test_zero_amount(self, mock_transaction_service):
-        """Test processing with zero amount"""
+    async def test_zero_amount(self, webhook_payloads):
+        """Test processing with zero amount should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
+        from pydantic import ValidationError
         
-        # Create payload with zero amount
-        zero_payload = WebhookPayload(
-            tx_id="test_tx_zero",
-            amount=0.00,
-            currency="USD",
-            sender_account="ACC123456",
-            receiver_account="ACC789012",
-            description="Test payment with zero amount"
-        )
+        # Use the helper function to create invalid payload
+        # This should now fail at Pydantic schema validation level
+        with pytest.raises(ValidationError) as exc_info:
+            WebhookPayload(**webhook_payloads["invalid"]["zero_amount"])
         
-        mock_transaction_service.find_one = AsyncMock(return_value=None)
-        mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock()
-        mock_transaction_service.return_value = mock_transaction_instance
-
-        result = await PaymentService.process_webhook(zero_payload)
-
-        assert result["status"] == "accepted"
-        assert result["tx_id"] == "test_tx_zero"
+        # Check that it's a greater_than validation error
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "greater_than" for error in errors)
+        assert any(error["loc"] == ("amount",) for error in errors)
 
     @pytest.mark.asyncio
-    async def test_empty_accounts(self, mock_transaction_service):
-        """Test processing with empty account numbers"""
+    async def test_empty_sender_account(self, webhook_payloads):
+        """Test processing with empty sender account should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
+        from pydantic import ValidationError
         
-        # Create payload with empty account numbers
-        empty_accounts_payload = WebhookPayload(
-            tx_id="test_tx_empty_accounts",
-            amount=100.50,
-            currency="USD",
-            sender_account="",
-            receiver_account="",
-            description="Test payment with empty accounts"
-        )
+        # Use the helper function to create invalid payload
+        # This should now fail at Pydantic schema validation level
+        with pytest.raises(ValidationError) as exc_info:
+            WebhookPayload(**webhook_payloads["invalid"]["empty_sender"])
         
-        mock_transaction_service.find_one = AsyncMock(return_value=None)
-        mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock()
-        mock_transaction_service.return_value = mock_transaction_instance
-
-        result = await PaymentService.process_webhook(empty_accounts_payload)
-
-        assert result["status"] == "accepted"
-        assert result["tx_id"] == "test_tx_empty_accounts"
+        # Check that it's a string validation error
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "string_too_short" for error in errors)
+        assert any(error["loc"] == ("sender_account",) for error in errors)
 
 
 class TestDataIntegrityUnit:
     """Unit tests for data integrity and corruption scenarios"""
 
     @pytest.mark.asyncio
-    async def test_corrupted_transaction_data_missing_fields(self, mock_db_find):
+    async def test_corrupted_transaction_data_missing_fields(self, mock_db_find, mock_populated_transaction):
         """Test handling of corrupted transaction data with missing fields"""
-        # Create a mock transaction with missing critical fields
-        corrupted_transaction = MagicMock()
-        corrupted_transaction.tx_id = "test_tx_123"
+        # Use the new fixture and override specific fields to simulate corruption
+        corrupted_transaction = mock_populated_transaction
         corrupted_transaction.amount = None  # Missing amount
         corrupted_transaction.currency = None  # Missing currency
         corrupted_transaction.sender_account = None  # Missing sender
@@ -217,19 +181,19 @@ class TestDataIntegrityUnit:
         
         mock_db_find.return_value = corrupted_transaction
         
-        result = await PaymentService.get_transaction_by_id("test_tx_123")
+        result = await PaymentService.get_transaction_by_id("test_tx_12345")
         
         assert result["status"] == "found"
         # Should handle None values gracefully
-        assert result["transaction"]["tx_id"] == "test_tx_123"
+        assert result["transaction"]["tx_id"] == "test_tx_12345"
         assert result["transaction"]["amount"] is None
         assert result["transaction"]["currency"] is None
 
     @pytest.mark.asyncio
-    async def test_transaction_with_incomplete_data(self, mock_db_find):
+    async def test_transaction_with_incomplete_data(self, mock_db_find, mock_populated_transaction):
         """Test handling of transaction with incomplete data"""
-        # Create a mock transaction with some fields missing
-        incomplete_transaction = MagicMock()
+        # Use the new fixture and override specific fields to simulate incomplete data
+        incomplete_transaction = mock_populated_transaction
         incomplete_transaction.tx_id = "test_tx_partial"
         incomplete_transaction.amount = 100.50
         incomplete_transaction.currency = "USD"

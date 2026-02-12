@@ -1,4 +1,4 @@
-from beanie import Document
+from beanie import Document, Indexed
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -7,13 +7,13 @@ from typing import Optional
 class Transaction(Document):
     """Transaction document model for storing payment data"""
 
-    tx_id: str
+    tx_id: Indexed(str, unique=True)  # Unique index on tx_id to prevent duplicate transactions
     amount: float
-    currency: str
-    sender_account: str
-    receiver_account: str
-    status: str = "pending"
-    timestamp: datetime = datetime.now(timezone.utc)
+    currency: Indexed(str)  # Index for currency queries
+    sender_account: Indexed(str)  # Index for sender account queries
+    receiver_account: Indexed(str)  # Index for receiver account queries
+    status: Indexed(str) = "pending"  # Index for status queries
+    timestamp: Indexed(datetime) = Field(default_factory=lambda: datetime.now(timezone.utc))  # Use factory for dynamic timing
     description: Optional[str] = None
 
     class Settings:

@@ -1,8 +1,9 @@
 import hmac
 import hashlib
 import os
-from fastapi import Request, HTTPException, Header
+from fastapi import Request, Header
 from dotenv import load_dotenv
+from app.core.exceptions import SecurityError
 import logging
 
 load_dotenv()
@@ -25,11 +26,11 @@ async def verify_hmac_signature(request: Request, x_signature: str = Header(None
         x_signature: X-Signature header value
 
     Raises:
-        HTTPException: If signature is missing or invalid
+        SecurityError: If signature is missing or invalid
     """
     if not x_signature:
         logger.warning("Missing signature header in webhook request")
-        raise HTTPException(status_code=401, detail="Missing signature header")
+        raise SecurityError("Missing signature header", "webhook_authentication")
 
     # Get raw request body
     body = await request.body()
@@ -42,6 +43,6 @@ async def verify_hmac_signature(request: Request, x_signature: str = Header(None
     # Compare signatures using constant-time comparison to prevent timing attacks
     if not hmac.compare_digest(expected_signature, x_signature):
         logger.warning("Invalid signature in webhook request")
-        raise HTTPException(status_code=401, detail="Invalid signature")
+        raise SecurityError("Invalid signature", "webhook_authentication")
 
     return True

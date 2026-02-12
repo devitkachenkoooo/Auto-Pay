@@ -17,7 +17,7 @@ class TestWebhookSecurityIntegration:
             "description": "Test payment",
         })
         assert response.status_code == 401
-        assert "Missing signature header" in response.json()["detail"]
+        assert "Missing signature header" in response.json()["detail"]["message"]
 
     def test_invalid_signature(self, client):
         """Test that requests with invalid signature are rejected"""
@@ -31,7 +31,7 @@ class TestWebhookSecurityIntegration:
             "description": "Test payment",
         }, headers=headers)
         assert response.status_code == 401
-        assert "Invalid signature" in response.json()["detail"]
+        assert "Invalid signature" in response.json()["detail"]["message"]
 
     def test_valid_signature(
         self, client, mock_hmac_secret, valid_webhook_headers
@@ -277,33 +277,58 @@ class TestReplayAttackSecurityIntegration:
         
         # Should fail because signature doesn't match the new payload
         assert response.status_code == 401
-        assert "Invalid signature" in response.json()["detail"]
+        assert "Invalid signature" in response.json()["detail"]["message"]
 
     def test_rate_limiting_protection(self, client):
-        """Test that rate limiting protects against excessive requests"""
-        # This test would require more sophisticated setup to properly test rate limiting
-        # For now, we'll just verify the endpoint exists and rate limiting is configured
+        """Test that rate limiting protects against excessive requests with deterministic behavior"""
+        # Mock HMAC_SECRET to match our test signatures
+        from unittest.mock import patch
         
-        # Make multiple rapid requests to the webhook endpoint
-        responses = []
-        for i in range(5):
-            response = client.post(
-                "/webhook/payment", 
-                json={
-                    "tx_id": f"rate_limit_test_{i}",
-                    "amount": 1.00,
-                    "currency": "USD",
-                    "sender_account": "ACC123",
-                    "receiver_account": "ACC456",
-                    "description": f"Rate limit test {i}",
-                }
-            )
-            responses.append(response)
-        
-        # At least some requests should be rejected due to missing signature
-        # (rate limiting is secondary to signature validation)
-        rejected_count = sum(1 for r in responses if r.status_code == 401)
-        assert rejected_count >= 5  # All should be rejected due to missing signature
+        with patch("app.security.HMAC_SECRET", "test_secret_key"):
+            # Test with a simple valid payload
+            base_payload = {
+                "tx_id": "rate_limit_test_base",
+                "amount": 1.00,
+                "currency": "USD", 
+                "sender_account": "ACC123",
+                "receiver_account": "ACC456",
+                "description": "Rate limit test",
+            }
+            
+            # Generate signature for this payload
+            import hmac
+            import hashlib
+            import json
+            HMAC_SECRET = "test_secret_key"
+            payload_str = json.dumps(base_payload, separators=(",", ":"))
+            signature = hmac.new(HMAC_SECRET.encode(), payload_str.encode(), hashlib.sha256).hexdigest()
+            headers = {"X-Signature": signature}
+            
+            # Make exactly 15 requests to test rate limiting (limit is 10/minute)
+            # We expect some to be rate limited, but the exact number may vary due to test state
+            responses = []
+            for i in range(15):
+                response = client.post("/webhook/payment", json=base_payload, headers=headers)
+                responses.append(response)
+            
+            # Count different response types
+            success_count = sum(1 for r in responses if r.status_code == 200)
+            rate_limited_count = sum(1 for r in responses if r.status_code == 429)
+            server_error_count = sum(1 for r in responses if r.status_code == 500)
+            
+            # More realistic assertions:
+            # - Should have some rate limited responses (at least 1)
+            # - Should have some non-rate-limited responses (they may succeed or fail due to database)
+            assert rate_limited_count >= 1, f"Should have at least 1 rate limited request, got {rate_limited_count}"
+            assert success_count + server_error_count >= 1, f"Should have at least 1 non-rate-limited request, got {success_count + server_error_count}"
+            assert rate_limited_count + success_count + server_error_count == 15, f"Should have exactly 15 total responses, got {rate_limited_count + success_count + server_error_count}"
+            
+            # Verify rate limited responses contain proper error information
+            rate_limited_responses = [r for r in responses if r.status_code == 429]
+            for response in rate_limited_responses:
+                response_json = response.json()
+                assert "error" in response_json, f"Rate limited response should have 'error' field: {response_json}"
+                assert "Rate limit exceeded" in response_json["error"], f"Should mention rate limit exceeded: {response_json['error']}"
 
 
 if __name__ == "__main__":
