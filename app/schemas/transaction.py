@@ -30,8 +30,9 @@ class BaseTransactionSchema(BaseModel):
     amount: Decimal = Field(
         ...,
         gt=0,
+        le=1000000,
         decimal_places=2,
-        max_digits=15,
+        max_digits=12,
         description="Transaction amount (must be positive)",
     )
 

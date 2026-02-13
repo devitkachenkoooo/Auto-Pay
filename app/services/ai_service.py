@@ -109,11 +109,7 @@ class AIService:
         total_amount = sum(tx["amount"] for tx in transaction_data)
         transaction_count = len(transaction_data)
         successful_tx = len(
-            [
-                tx
-                for tx in transaction_data
-                if tx["status"] in ("success", "completed")
-            ]
+            [tx for tx in transaction_data if tx["status"] in ("success", "completed")]
         )
         pending_tx = len([tx for tx in transaction_data if tx["status"] == "pending"])
 

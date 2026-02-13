@@ -175,7 +175,7 @@ async def health_check() -> Dict[str, Any]:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
+    except Exception:
         logger.error("Database health check failed", exc_info=True)
         return {
             "status": "unhealthy",

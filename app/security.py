@@ -49,7 +49,9 @@ async def verify_hmac_signature(
     """
     if not HMAC_SECRET:
         logger.error("HMAC_SECRET_KEY is not configured; denying webhook request")
-        raise SecurityError("Webhook verification not configured", "webhook_authentication")
+        raise SecurityError(
+            "Webhook verification not configured", "webhook_authentication"
+        )
 
     # --- Validate signature header ---
     if not x_signature:
@@ -69,7 +71,9 @@ async def verify_hmac_signature(
     current_time = int(time.time())
     # Reject timestamps too far in the future (clock skew / replay window bypass)
     if request_timestamp > current_time + 5:
-        raise SecurityError("Request timestamp is in the future", "webhook_authentication")
+        raise SecurityError(
+            "Request timestamp is in the future", "webhook_authentication"
+        )
 
     age = current_time - request_timestamp
     if age > MAX_WEBHOOK_AGE_SECONDS:

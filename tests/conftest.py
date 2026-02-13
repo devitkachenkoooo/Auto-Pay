@@ -101,6 +101,13 @@ def create_invalid_webhook_payloads():
         "same_accounts": create_webhook_payload(
             sender_account="ACC123", receiver_account="ACC123", tx_id="same_acc"
         ),
+        "invalid_amount_type": create_webhook_payload(amount="not_a_number"),
+        "too_high_amount": create_webhook_payload(amount="1000001.00"),
+        "too_many_decimals": create_webhook_payload(amount="100.555"),
+        "invalid_tx_id_format": create_webhook_payload(tx_id="invalid id! @#$"),
+        "invalid_currency_format": create_webhook_payload(currency="usd"),
+        "invalid_tx_id_chars": create_webhook_payload(tx_id="tx@123!"),
+        "long_description": create_webhook_payload(description="a" * 501),
     }
 
 
