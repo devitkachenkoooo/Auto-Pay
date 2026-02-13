@@ -14,7 +14,7 @@ import logging
 import time
 import json
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from functools import wraps
 from datetime import datetime, timezone
 from app.core.exceptions import BaseAppError
@@ -38,9 +38,11 @@ class ErrorMonitor:
         """
         error_type = type(error).__name__
         error_id = f"{error_type}_{int(time.time())}"
-        
+
         # Track in-memory for the current process lifetime (ephemeral)
-        self.error_counts_memory[error_type] = self.error_counts_memory.get(error_type, 0) + 1
+        self.error_counts_memory[error_type] = (
+            self.error_counts_memory.get(error_type, 0) + 1
+        )
         count = self.error_counts_memory[error_type]
 
         log_data = {
@@ -60,7 +62,9 @@ class ErrorMonitor:
         # Emit as JSON string for cloud-native log collectors
         self.logger.error(json.dumps(log_data))
 
-    def log_performance(self, operation: str, duration: float, context: Dict[str, Any] = None):
+    def log_performance(
+        self, operation: str, duration: float, context: Dict[str, Any] = None
+    ):
         """
         Log performance metrics as structured JSON.
 
@@ -100,10 +104,12 @@ def monitor_errors(operation_name: str = None):
     """
     Decorator for monitoring function errors and performance.
     """
+
     def decorator(func):
         import asyncio
 
         if asyncio.iscoroutinefunction(func):
+
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 op_name = operation_name or f"{func.__module__}.{func.__name__}"
@@ -126,6 +132,7 @@ def monitor_errors(operation_name: str = None):
 
             return async_wrapper
         else:
+
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
                 op_name = operation_name or f"{func.__module__}.{func.__name__}"
@@ -174,9 +181,12 @@ def setup_monitoring():
 
     # Use a dedicated logger to avoid conflicts
     monitor_logger = logging.getLogger("auto_pay.monitor")
-    monitor_logger.info(json.dumps({
-        "event": "system_startup",
-        "message": "Monitoring initialized in Cloud-Native mode (STDOUT only)",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }))
-
+    monitor_logger.info(
+        json.dumps(
+            {
+                "event": "system_startup",
+                "message": "Monitoring initialized in Cloud-Native mode (STDOUT only)",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    )

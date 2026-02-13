@@ -24,9 +24,6 @@ logger = logging.getLogger(__name__)
 # HMAC secret key for webhook signature verification
 HMAC_SECRET = os.getenv("HMAC_SECRET_KEY")
 
-if not HMAC_SECRET:
-    raise ValueError("HMAC_SECRET_KEY environment variable is not set")
-
 # Maximum age for a webhook request (in seconds)
 MAX_WEBHOOK_AGE_SECONDS = int(os.getenv("MAX_WEBHOOK_AGE_SECONDS", "300"))  # 5 minutes
 
@@ -50,6 +47,10 @@ async def verify_hmac_signature(
     Raises:
         SecurityError: If signature is missing, invalid, or the request is too old
     """
+    if not HMAC_SECRET:
+        logger.error("HMAC_SECRET_KEY is not configured; denying webhook request")
+        raise SecurityError("Webhook verification not configured", "webhook_authentication")
+
     # --- Validate signature header ---
     if not x_signature:
         logger.warning("Missing signature header in webhook request")
@@ -66,8 +67,11 @@ async def verify_hmac_signature(
         raise SecurityError("Invalid timestamp format", "webhook_authentication")
 
     current_time = int(time.time())
-    age = abs(current_time - request_timestamp)
+    # Reject timestamps too far in the future (clock skew / replay window bypass)
+    if request_timestamp > current_time + 5:
+        raise SecurityError("Request timestamp is in the future", "webhook_authentication")
 
+    age = current_time - request_timestamp
     if age > MAX_WEBHOOK_AGE_SECONDS:
         logger.warning(
             f"Webhook request too old: {age}s (max: {MAX_WEBHOOK_AGE_SECONDS}s)"
@@ -75,7 +79,9 @@ async def verify_hmac_signature(
         raise SecurityError("Request timestamp expired", "webhook_authentication")
 
     # --- Compute and verify HMAC signature ---
-    body = await request.body()
+    body = getattr(request.state, "body", None)
+    if body is None:
+        body = await request.body()
 
     # The signed payload includes the timestamp to bind it to the time window
     signed_payload = f"{x_timestamp}.".encode() + body

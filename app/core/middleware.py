@@ -19,22 +19,48 @@ from app.core.monitoring import error_monitor
 
 # Comprehensive set of sensitive field names
 SENSITIVE_KEYS: Set[str] = {
-    "password", "passwd", "pass",
-    "token", "access_token", "refresh_token", "auth_token", "bearer",
-    "secret", "secret_key", "client_secret",
-    "key", "api_key", "apikey", "private_key",
-    "authorization", "auth",
-    "credit_card", "card_number", "cvv", "cvc", "expiry",
-    "ssn", "social_security",
-    "pin", "otp",
-    "session_id", "session", "cookie",
-    "hmac", "signature", "x_signature",
+    "password",
+    "passwd",
+    "pass",
+    "token",
+    "access_token",
+    "refresh_token",
+    "auth_token",
+    "bearer",
+    "secret",
+    "secret_key",
+    "client_secret",
+    "key",
+    "api_key",
+    "apikey",
+    "private_key",
+    "authorization",
+    "auth",
+    "credit_card",
+    "card_number",
+    "cvv",
+    "cvc",
+    "expiry",
+    "ssn",
+    "social_security",
+    "pin",
+    "otp",
+    "session_id",
+    "session",
+    "cookie",
+    "hmac",
+    "signature",
+    "x_signature",
 }
 
 # Headers that should never be logged
 SENSITIVE_HEADERS: Set[str] = {
-    "authorization", "cookie", "set-cookie",
-    "x-signature", "x-api-key", "x-auth-token",
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-signature",
+    "x-api-key",
+    "x-auth-token",
 }
 
 
@@ -96,7 +122,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         async def receive():
             return {"type": "http.request", "body": body}
-        
+
         request._receive = receive
 
         # Log request details (uses cached body)
@@ -119,13 +145,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             # Log the error with request context
             process_time = time.time() - start_time
-            error_monitor.log_error(e, {
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "process_time": process_time,
-                "context": "middleware_error",
-            })
+            error_monitor.log_error(
+                e,
+                {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "process_time": process_time,
+                    "context": "middleware_error",
+                },
+            )
             raise
 
     def _log_request(self, request: Request, request_id: str):
@@ -156,10 +185,18 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     pass
 
-    def _log_response(self, request: Request, response: Response, request_id: str, process_time: float):
+    def _log_response(
+        self, request: Request, response: Response, request_id: str, process_time: float
+    ):
         """Log response details with sanitized headers."""
         status_code = response.status_code
-        level = logging.INFO if status_code < 400 else logging.WARNING if status_code < 500 else logging.ERROR
+        level = (
+            logging.INFO
+            if status_code < 400
+            else logging.WARNING
+            if status_code < 500
+            else logging.ERROR
+        )
 
         self.logger.log(
             level,
@@ -188,4 +225,3 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             pass
 
         return True
-

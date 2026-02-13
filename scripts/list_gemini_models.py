@@ -37,10 +37,10 @@ def list_gemini_models() -> None:
         # Fetch all available models
         print("Fetching available models...")
         models_pager = client.models.list()
-        
+
         # Get models from the pager
         models = list(models_pager)
-        
+
         if not models:
             print("No models found or empty response.")
             return

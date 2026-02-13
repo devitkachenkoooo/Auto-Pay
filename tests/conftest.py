@@ -1,10 +1,8 @@
 import pytest
 import tenacity
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
-from app.models import Transaction
-from app.services.payment_service import PaymentService
 from app.schemas.transaction import WebhookPayload
 import os
 
@@ -71,9 +69,14 @@ def mock_transaction_service():
 
 
 # Webhook payload helpers
-def create_webhook_payload(tx_id="test_tx_12345", amount="100.50", currency="USD", 
-                          sender_account="ACC123456", receiver_account="ACC789012", 
-                          description="Test payment"):
+def create_webhook_payload(
+    tx_id="test_tx_12345",
+    amount="100.50",
+    currency="USD",
+    sender_account="ACC123456",
+    receiver_account="ACC789012",
+    description="Test payment",
+):
     """Create webhook payload with customizable parameters"""
     return {
         "tx_id": tx_id,
@@ -92,8 +95,12 @@ def create_invalid_webhook_payloads():
         "zero_amount": create_webhook_payload(amount="0.00", tx_id="zero_amount"),
         "empty_tx_id": create_webhook_payload(tx_id="", amount="100.50"),
         "empty_sender": create_webhook_payload(sender_account="", tx_id="empty_sender"),
-        "empty_receiver": create_webhook_payload(receiver_account="", tx_id="empty_receiver"),
-        "same_accounts": create_webhook_payload(sender_account="ACC123", receiver_account="ACC123", tx_id="same_acc"),
+        "empty_receiver": create_webhook_payload(
+            receiver_account="", tx_id="empty_receiver"
+        ),
+        "same_accounts": create_webhook_payload(
+            sender_account="ACC123", receiver_account="ACC123", tx_id="same_acc"
+        ),
     }
 
 
@@ -118,7 +125,7 @@ def webhook_payloads():
     """Fixture providing various webhook payloads for testing"""
     return {
         "valid": create_webhook_payload(),
-        "invalid": create_invalid_webhook_payloads()
+        "invalid": create_invalid_webhook_payloads(),
     }
 
 
@@ -127,7 +134,7 @@ def mock_populated_transaction():
     """Create a mock transaction automatically populated with data"""
     from decimal import Decimal
     from datetime import datetime
-    
+
     mock_transaction = AsyncMock()
     # Set all attributes directly with proper types
     mock_transaction.tx_id = "test_tx_12345"
@@ -146,7 +153,7 @@ def mock_existing_transaction():
     """Create a mock existing transaction object"""
     from decimal import Decimal
     from datetime import datetime
-    
+
     mock_tx = AsyncMock()
     mock_tx.tx_id = VALID_PAYLOAD["tx_id"]
     mock_tx.amount = Decimal(VALID_PAYLOAD["amount"])  # Convert to Decimal
@@ -172,14 +179,16 @@ def generate_signature(payload: dict, secret: str, timestamp: int = None) -> str
     import hashlib
     import json
     import time
-    
+
     if timestamp is None:
         timestamp = int(time.time())
-    
+
     payload_str = json.dumps(payload, separators=(",", ":"))
     # Signature is computed over timestamp + "." + payload
     sign_data = f"{timestamp}.{payload_str}"
-    return hmac.new(secret.encode(), sign_data.encode(), hashlib.sha256).hexdigest(), timestamp
+    return hmac.new(
+        secret.encode(), sign_data.encode(), hashlib.sha256
+    ).hexdigest(), timestamp
 
 
 @pytest.fixture
@@ -193,28 +202,24 @@ def valid_signature():
 def valid_webhook_headers(valid_signature):
     """Headers with valid HMAC signature and timestamp"""
     signature, timestamp = valid_signature
-    return {
-        "X-Signature": signature,
-        "X-Timestamp": str(timestamp)
-    }
+    return {"X-Signature": signature, "X-Timestamp": str(timestamp)}
 
 
 @pytest.fixture
 def mock_env_vars():
     """Mock environment variables for test isolation"""
-    import os
     from unittest.mock import patch
-    
+
     original_env = os.environ.copy()
     test_env = {
         "GEMINI_API_KEY": "test_api_key",
         "HMAC_SECRET_KEY": "test_secret_key",
-        "MONGO_URL": "mongodb://localhost:27017/test"
+        "MONGO_URL": "mongodb://localhost:27017/test",
     }
-    
+
     with patch.dict(os.environ, test_env, clear=True):
         yield test_env
-    
+
     # Restore original environment
     os.environ.clear()
     os.environ.update(original_env)
@@ -231,8 +236,12 @@ def mock_ai_client():
 @pytest.fixture
 def mock_zero_wait_retry():
     """Standard fixture for patching retry mechanisms to zero wait time"""
-    with patch("tenacity.wait_exponential", return_value=tenacity.wait_fixed(0)), \
-         patch("tenacity.stop_after_attempt", return_value=tenacity.stop_after_attempt(3)):
+    with (
+        patch("tenacity.wait_exponential", return_value=tenacity.wait_fixed(0)),
+        patch(
+            "tenacity.stop_after_attempt", return_value=tenacity.stop_after_attempt(3)
+        ),
+    ):
         yield
 
 
@@ -247,5 +256,5 @@ def mock_transaction_data():
         "receiver_account": "ACC789012",
         "status": "success",
         "description": "Test transaction",
-        "timestamp": None
+        "timestamp": None,
     }

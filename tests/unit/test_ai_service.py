@@ -28,7 +28,9 @@ class TestAIServiceUnit:
 
     @pytest.mark.asyncio
     async def test_gemini_api_failure(self, mock_populated_transaction):
-        self.mock_client_instance.models.generate_content.side_effect = ConnectionError("API Key Invalid")
+        self.mock_client_instance.models.generate_content.side_effect = ConnectionError(
+            "API Key Invalid"
+        )
 
         with pytest.raises(BaseAppError) as exc_info:
             ai_service = AIService()
@@ -42,7 +44,9 @@ class TestAIServiceUnit:
         mock_response.text = ""
 
         ai_service = AIService()
-        with patch.object(ai_service.client.models, "generate_content", return_value=mock_response):
+        with patch.object(
+            ai_service.client.models, "generate_content", return_value=mock_response
+        ):
             result = await ai_service.analyze_transactions([mock_populated_transaction])
 
         assert result == ""
@@ -61,7 +65,11 @@ class TestAIServiceUnit:
     @pytest.mark.asyncio
     async def test_retry_mechanism_exhaustion(self, mock_populated_transaction):
         ai_service = AIService()
-        with patch.object(ai_service.client.models, "generate_content", side_effect=TimeoutError("Rate limit exceeded")):
+        with patch.object(
+            ai_service.client.models,
+            "generate_content",
+            side_effect=TimeoutError("Rate limit exceeded"),
+        ):
             with pytest.raises(BaseAppError) as exc_info:
                 await ai_service.analyze_transactions([mock_populated_transaction])
 
@@ -79,7 +87,11 @@ class TestAIServiceUnit:
     @pytest.mark.asyncio
     async def test_daily_report_ai_failure(self, mock_populated_transaction):
         ai_service = AIService()
-        with patch.object(ai_service.client.models, "generate_content", side_effect=OSError("Service unavailable")):
+        with patch.object(
+            ai_service.client.models,
+            "generate_content",
+            side_effect=OSError("Service unavailable"),
+        ):
             with pytest.raises(BaseAppError) as exc_info:
                 await ai_service.generate_daily_report([mock_populated_transaction])
 
@@ -96,10 +108,14 @@ class TestAIServiceUnit:
             with pytest.raises(ValueError) as exc_info:
                 AIService()
 
-            assert "GEMINI_API_KEY environment variable is not set" in str(exc_info.value)
+            assert "GEMINI_API_KEY environment variable is not set" in str(
+                exc_info.value
+            )
 
     @pytest.mark.asyncio
-    async def test_transaction_formatting_with_missing_timestamp(self, mock_transaction_data):
+    async def test_transaction_formatting_with_missing_timestamp(
+        self, mock_transaction_data
+    ):
         mock_transaction = MagicMock()
         mock_transaction.__dict__.update(mock_transaction_data)
         mock_transaction.timestamp = None
@@ -111,7 +127,9 @@ class TestAIServiceUnit:
         assert formatted[0]["timestamp"] is None
 
     @pytest.mark.asyncio
-    async def test_transaction_formatting_with_missing_description(self, mock_transaction_data):
+    async def test_transaction_formatting_with_missing_description(
+        self, mock_transaction_data
+    ):
         mock_transaction = MagicMock()
         mock_transaction.__dict__.update(mock_transaction_data)
         mock_transaction.description = ""
@@ -138,7 +156,9 @@ class TestAIServiceUnit:
         self.mock_client_instance.models.generate_content.assert_called_once()
 
         call_args = self.mock_client_instance.models.generate_content.call_args
-        prompt = call_args[1]["contents"] if "contents" in call_args[1] else call_args[0][1]
+        prompt = (
+            call_args[1]["contents"] if "contents" in call_args[1] else call_args[0][1]
+        )
         assert mock_transaction_data["tx_id"] in prompt
         assert str(mock_transaction_data["amount"]) in prompt
 
@@ -200,7 +220,9 @@ class TestAIServiceUnit:
         assert result == ""
 
     @pytest.mark.asyncio
-    async def test_prompt_contains_required_transaction_fields(self, mock_transaction_data):
+    async def test_prompt_contains_required_transaction_fields(
+        self, mock_transaction_data
+    ):
         mock_transaction = MagicMock()
         mock_transaction.__dict__.update(mock_transaction_data)
 
@@ -212,7 +234,9 @@ class TestAIServiceUnit:
         await ai_service.analyze_transactions([mock_transaction])
 
         call_args = self.mock_client_instance.models.generate_content.call_args
-        prompt = call_args[1]["contents"] if "contents" in call_args[1] else call_args[0][1]
+        prompt = (
+            call_args[1]["contents"] if "contents" in call_args[1] else call_args[0][1]
+        )
 
         assert mock_transaction_data["tx_id"] in prompt
         assert str(mock_transaction_data["amount"]) in prompt
@@ -234,7 +258,10 @@ class TestAIServiceUnit:
             "generate_content",
             side_effect=[TimeoutError("First attempt failed"), mock_response],
         ) as mock_generate:
-            with patch("app.services.ai_service.wait_exponential", return_value=tenacity.wait_fixed(0)):
+            with patch(
+                "app.services.ai_service.wait_exponential",
+                return_value=tenacity.wait_fixed(0),
+            ):
                 result = await ai_service.analyze_transactions([mock_transaction])
 
         assert result == "Success on retry"

@@ -46,9 +46,7 @@ class AIService:
     )
     def _call_ai_model(self, prompt: str):
         """Synchronous AI model call for use with retry mechanism."""
-        return self.client.models.generate_content(
-            model=self.model_id, contents=prompt
-        )
+        return self.client.models.generate_content(model=self.model_id, contents=prompt)
 
     async def analyze_transactions(self, transactions: List[Transaction]) -> str:
         """Analyze transactions using Gemini AI with retry mechanism."""
@@ -111,7 +109,11 @@ class AIService:
         total_amount = sum(tx["amount"] for tx in transaction_data)
         transaction_count = len(transaction_data)
         successful_tx = len(
-            [tx for tx in transaction_data if tx["status"] == "completed"]
+            [
+                tx
+                for tx in transaction_data
+                if tx["status"] in ("success", "completed")
+            ]
         )
         pending_tx = len([tx for tx in transaction_data if tx["status"] == "pending"])
 
@@ -158,7 +160,9 @@ class AIService:
         """Generate a daily transaction report using AI."""
         try:
             if not transactions:
-                return "Daily Transaction Report\n\nNo transactions found for this period."
+                return (
+                    "Daily Transaction Report\n\nNo transactions found for this period."
+                )
 
             analysis = await self.analyze_transactions(transactions)
 

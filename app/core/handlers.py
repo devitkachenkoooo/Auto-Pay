@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 async def app_exception_handler(request: Request, exc: BaseAppError) -> JSONResponse:
     """
     Generic handler for all BaseAppError subclasses.
-    
+
     - Logs full internal details (to_dict) for debugging.
     - Returns sanitized response (to_safe_dict) to the client.
     """
     # Get exception details for logging, but avoid 'message' key conflict
     exc_details = exc.to_dict()
-    log_details = {k: v for k, v in exc_details.items() if k != 'message'}
-    
+    log_details = {k: v for k, v in exc_details.items() if k != "message"}
+
     # Determine log level based on status code
     if exc.http_status_code >= 500:
         logger.error(
@@ -54,7 +54,7 @@ async def app_exception_handler(request: Request, exc: BaseAppError) -> JSONResp
 def setup_exception_handlers(app: FastAPI):
     """
     Register the single generic exception handler.
-    
+
     Because BaseAppError is the base class, this catches all subclasses
     (PaymentValidationError, SecurityError, DatabaseError, etc.)
     automatically — no need to register each one individually.

@@ -1,5 +1,5 @@
 [tool.taskipy.tasks]
-lint = "ruff check . --fix && ruff format ."
+lint = "ruff check . --fix -v && ruff format ."
 dev = "task lint && uvicorn app.main:app --reload"
 test = "pytest"
 mock = "python scripts/mock_sender.py"

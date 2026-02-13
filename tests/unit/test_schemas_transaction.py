@@ -14,7 +14,9 @@ from app.schemas.transaction import WebhookPayload
         ("empty_receiver", ("receiver_account",), "string_too_short"),
     ],
 )
-def test_webhook_payload_validation_errors(invalid_payloads, payload_key, expected_loc, expected_type):
+def test_webhook_payload_validation_errors(
+    invalid_payloads, payload_key, expected_loc, expected_type
+):
     with pytest.raises(ValidationError) as exc_info:
         WebhookPayload(**invalid_payloads[payload_key])
 

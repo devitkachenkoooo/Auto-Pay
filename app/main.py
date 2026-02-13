@@ -11,7 +11,6 @@ Fixes applied:
 """
 
 from fastapi import FastAPI, Request, HTTPException, Depends, Header
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.database import init_db, close_database
 from app.routes.payments import router as payments_router
@@ -19,6 +18,7 @@ from app.core.handlers import setup_exception_handlers
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.monitoring import setup_monitoring, error_monitor, monitor_errors
 from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
@@ -58,7 +58,9 @@ async def lifespan(app: FastAPI):
         logger.info("AutoPay AI started successfully")
 
         error_summary = error_monitor.get_error_summary()
-        logger.info(f"Startup complete - Errors tracked: {error_summary['total_errors']}")
+        logger.info(
+            f"Startup complete - Errors tracked: {error_summary['total_errors']}"
+        )
 
     except Exception as e:
         error_monitor.log_error(e, {"context": "application_startup"})
@@ -87,6 +89,9 @@ app.state.limiter = limiter
 
 # Add global exception handler for rate limit exceeded
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Register SlowAPI middleware (required for consistent rate limiting behavior)
+app.add_middleware(SlowAPIMiddleware)
 
 # Setup custom exception handlers (single generic handler for all BaseAppError subclasses)
 setup_exception_handlers(app)

@@ -10,7 +10,7 @@ Design:
     - `to_safe_dict()` returns a sanitized response (for client-facing APIs).
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 
 class BaseAppError(Exception):
@@ -18,7 +18,9 @@ class BaseAppError(Exception):
 
     http_status_code: int = 500
 
-    def __init__(self, message: str, details: str = None, context: Dict[str, Any] = None):
+    def __init__(
+        self, message: str, details: str = None, context: Dict[str, Any] = None
+    ):
         self.message = message
         self.details = details
         self.context = context or {}
@@ -111,7 +113,9 @@ class SecurityError(BaseAppError):
         if security_context:
             context["security_context"] = security_context
 
-        details = f"Security failure in: {security_context}" if security_context else None
+        details = (
+            f"Security failure in: {security_context}" if security_context else None
+        )
         super().__init__(message, details, context)
 
     def to_safe_dict(self) -> Dict[str, Any]:
@@ -152,7 +156,9 @@ class ConfigurationError(BaseAppError):
 
     http_status_code: int = 500
 
-    def __init__(self, message: str, config_key: str = None, expected_value: str = None):
+    def __init__(
+        self, message: str, config_key: str = None, expected_value: str = None
+    ):
         self.config_key = config_key
         self.expected_value = expected_value
         context = {}

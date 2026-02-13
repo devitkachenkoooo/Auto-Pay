@@ -1,7 +1,7 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from app.services.payment_service import PaymentService
-from app.core.exceptions import PaymentValidationError, DatabaseError
+from app.core.exceptions import DatabaseError
 
 pytest.skip("Legacy module: moved to tests/unit/", allow_module_level=True)
 
@@ -16,7 +16,7 @@ class TestPaymentServiceUnit:
         """Test processing a new transaction"""
         # Mock find_one class method
         mock_transaction_service.find_one = AsyncMock(return_value=None)
-        
+
         # Mock constructor to return our mock instance
         mock_transaction_instance = AsyncMock()
         mock_transaction_instance.insert = AsyncMock()
@@ -51,7 +51,9 @@ class TestPaymentServiceUnit:
         """Test retrieving an existing transaction"""
         mock_db_find.return_value = mock_existing_transaction
 
-        result = await PaymentService.get_transaction_by_id(mock_existing_transaction.tx_id)
+        result = await PaymentService.get_transaction_by_id(
+            mock_existing_transaction.tx_id
+        )
 
         assert result.status == "found"
         assert result.transaction.tx_id == mock_existing_transaction.tx_id
@@ -63,9 +65,10 @@ class TestPaymentServiceUnit:
         mock_db_find.return_value = None
 
         from app.core.exceptions import NotFoundError
+
         with pytest.raises(NotFoundError) as exc_info:
             await PaymentService.get_transaction_by_id("nonexistent_tx")
-        
+
         assert "Transaction not found" in str(exc_info.value)
         assert exc_info.value.identifier == "nonexistent_tx"
         mock_db_find.assert_called_once_with({"tx_id": "nonexistent_tx"})
@@ -106,12 +109,12 @@ class TestEdgeCasesUnit:
         """Test processing with empty tx_id should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
         from pydantic import ValidationError
-        
+
         # Use the helper function to create invalid payload
         # This should now fail at Pydantic schema validation level
         with pytest.raises(ValidationError) as exc_info:
             WebhookPayload(**webhook_payloads["invalid"]["empty_tx_id"])
-        
+
         # Check that it's a string validation error
         errors = exc_info.value.errors()
         assert any(error["type"] == "string_too_short" for error in errors)
@@ -122,12 +125,12 @@ class TestEdgeCasesUnit:
         """Test processing with negative amount should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
         from pydantic import ValidationError
-        
+
         # Use the helper function to create invalid payload
         # This should now fail at Pydantic schema validation level
         with pytest.raises(ValidationError) as exc_info:
             WebhookPayload(**webhook_payloads["invalid"]["negative_amount"])
-        
+
         # Check that it's a greater_than validation error
         errors = exc_info.value.errors()
         assert any(error["type"] == "greater_than" for error in errors)
@@ -138,12 +141,12 @@ class TestEdgeCasesUnit:
         """Test processing with zero amount should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
         from pydantic import ValidationError
-        
+
         # Use the helper function to create invalid payload
         # This should now fail at Pydantic schema validation level
         with pytest.raises(ValidationError) as exc_info:
             WebhookPayload(**webhook_payloads["invalid"]["zero_amount"])
-        
+
         # Check that it's a greater_than validation error
         errors = exc_info.value.errors()
         assert any(error["type"] == "greater_than" for error in errors)
@@ -154,12 +157,12 @@ class TestEdgeCasesUnit:
         """Test processing with empty sender account should raise Pydantic validation error"""
         from app.schemas.transaction import WebhookPayload
         from pydantic import ValidationError
-        
+
         # Use the helper function to create invalid payload
         # This should now fail at Pydantic schema validation level
         with pytest.raises(ValidationError) as exc_info:
             WebhookPayload(**webhook_payloads["invalid"]["empty_sender"])
-        
+
         # Check that it's a string validation error
         errors = exc_info.value.errors()
         assert any(error["type"] == "string_too_short" for error in errors)
@@ -172,28 +175,31 @@ class TestDataIntegrityUnit:
     @pytest.mark.asyncio
     async def test_corrupted_transaction_data_missing_fields(self, mock_db_find):
         """Test handling of corrupted transaction data with missing fields"""
-        from decimal import Decimal
-        
+
         # Create a mock transaction with some None values to simulate corruption
         corrupted_transaction = AsyncMock()
         corrupted_transaction.tx_id = "test_tx_12345"
-        corrupted_transaction.amount = None  # Missing amount - this should cause DatabaseError
+        corrupted_transaction.amount = (
+            None  # Missing amount - this should cause DatabaseError
+        )
         corrupted_transaction.currency = None  # Missing currency
         corrupted_transaction.sender_account = None
         corrupted_transaction.receiver_account = None
         corrupted_transaction.status = None
         corrupted_transaction.description = None
         corrupted_transaction.timestamp = None
-        
+
         mock_db_find.return_value = corrupted_transaction
-        
+
         with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.get_transaction_by_id("test_tx_12345")
-        
+
         assert "Failed to retrieve transaction" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_transaction_with_incomplete_data(self, mock_db_find, mock_populated_transaction):
+    async def test_transaction_with_incomplete_data(
+        self, mock_db_find, mock_populated_transaction
+    ):
         """Test handling of transaction with incomplete data"""
         # Use the new fixture and override specific fields to simulate incomplete data
         incomplete_transaction = mock_populated_transaction
@@ -206,27 +212,32 @@ class TestDataIntegrityUnit:
         incomplete_transaction.status = "success"
         incomplete_transaction.description = "Partial transaction"
         incomplete_transaction.timestamp = None
-        
+
         mock_db_find.return_value = incomplete_transaction
-        
+
         result = await PaymentService.get_transaction_by_id("test_tx_partial")
-        
+
         assert result.status == "found"
         assert result.transaction.tx_id == "test_tx_partial"
         assert result.transaction.amount == 100.50
         assert result.transaction.receiver_account is None
 
     @pytest.mark.asyncio
-    async def test_database_insert_failure(self, webhook_payload, mock_transaction_service):
+    async def test_database_insert_failure(
+        self, webhook_payload, mock_transaction_service
+    ):
         """Test handling of database insert operation failure"""
         mock_transaction_service.find_one = AsyncMock(return_value=None)
-        
+
         # Mock constructor to return instance that fails on insert
         mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock(side_effect=Exception("Insert operation failed"))
+        mock_transaction_instance.insert = AsyncMock(
+            side_effect=Exception("Insert operation failed")
+        )
         mock_transaction_service.return_value = mock_transaction_instance
 
         from app.core.exceptions import DatabaseError
+
         with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.process_webhook(webhook_payload)
 
@@ -242,14 +253,15 @@ class TestDataIntegrityUnit:
             "amount": 100.50,
             # Missing other required fields
         }
-        
+
         mock_db_find.return_value = corrupted_response
-        
+
         # This should cause an Exception when trying to access missing fields
         from app.core.exceptions import DatabaseError
+
         with pytest.raises(DatabaseError) as exc_info:
             await PaymentService.get_transaction_by_id("test_tx_corrupted")
-        
+
         assert "Failed to retrieve transaction" in str(exc_info.value)
 
 

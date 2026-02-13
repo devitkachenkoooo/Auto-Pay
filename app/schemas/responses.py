@@ -13,33 +13,24 @@ from decimal import Decimal
 
 class ServiceResult(BaseModel):
     """Generic base class for all service responses."""
-    
-    success: bool = Field(
-        ...,
-        description="Whether the operation was successful"
-    )
-    message: str = Field(
-        ...,
-        description="Human-readable result message"
-    )
+
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Human-readable result message")
 
 
 class PaymentResponse(ServiceResult):
     """Response model for payment webhook processing."""
-    
+
     status: str = Field(
         ...,
-        description="Processing status: 'processed', 'duplicate', 'accepted', 'already_processed'"
+        description="Processing status: 'processed', 'duplicate', 'accepted', 'already_processed'",
     )
-    tx_id: str = Field(
-        ...,
-        description="Transaction identifier"
-    )
+    tx_id: str = Field(..., description="Transaction identifier")
 
 
 class TransactionDetails(BaseModel):
     """Transaction details embedded in responses."""
-    
+
     tx_id: str = Field(..., description="Transaction identifier")
     amount: Decimal = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Currency code")
@@ -52,17 +43,12 @@ class TransactionDetails(BaseModel):
 
 class TransactionResponse(ServiceResult):
     """Response model for transaction retrieval."""
-    
-    status: str = Field(
-        ...,
-        description="Retrieval status: 'found'"
-    )
-    transaction: TransactionDetails = Field(
-        ...,
-        description="Transaction details"
-    )
+
+    status: str = Field(..., description="Retrieval status: 'found'")
+    transaction: TransactionDetails = Field(..., description="Transaction details")
 
 
 class WebhookResult(PaymentResponse):
     """Alias for PaymentResponse - webhook processing result."""
+
     pass

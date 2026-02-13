@@ -7,7 +7,9 @@ from app.core.exceptions import DatabaseError
 
 class TestPaymentServiceUnit:
     @pytest.mark.asyncio
-    async def test_process_new_transaction(self, webhook_payload, mock_transaction_service):
+    async def test_process_new_transaction(
+        self, webhook_payload, mock_transaction_service
+    ):
         mock_transaction_service.find_one = AsyncMock(return_value=None)
 
         mock_transaction_instance = AsyncMock()
@@ -18,11 +20,15 @@ class TestPaymentServiceUnit:
 
         assert result.status == "processed"
         assert result.tx_id == webhook_payload.tx_id
-        mock_transaction_service.find_one.assert_called_once_with({"tx_id": webhook_payload.tx_id})
+        mock_transaction_service.find_one.assert_called_once_with(
+            {"tx_id": webhook_payload.tx_id}
+        )
         mock_transaction_instance.insert.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_duplicate_transaction(self, webhook_payload, mock_existing_transaction, mock_db_find):
+    async def test_process_duplicate_transaction(
+        self, webhook_payload, mock_existing_transaction, mock_db_find
+    ):
         mock_db_find.return_value = mock_existing_transaction
 
         result = await PaymentService.process_webhook(webhook_payload)
@@ -32,10 +38,14 @@ class TestPaymentServiceUnit:
         mock_db_find.assert_called_once_with({"tx_id": webhook_payload.tx_id})
 
     @pytest.mark.asyncio
-    async def test_get_existing_transaction(self, mock_existing_transaction, mock_db_find):
+    async def test_get_existing_transaction(
+        self, mock_existing_transaction, mock_db_find
+    ):
         mock_db_find.return_value = mock_existing_transaction
 
-        result = await PaymentService.get_transaction_by_id(mock_existing_transaction.tx_id)
+        result = await PaymentService.get_transaction_by_id(
+            mock_existing_transaction.tx_id
+        )
 
         assert result.status == "found"
         assert result.transaction.tx_id == mock_existing_transaction.tx_id
@@ -99,7 +109,9 @@ class TestDataIntegrityUnit:
         assert "Failed to retrieve transaction" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_transaction_with_incomplete_data(self, mock_db_find, mock_populated_transaction):
+    async def test_transaction_with_incomplete_data(
+        self, mock_db_find, mock_populated_transaction
+    ):
         incomplete_transaction = mock_populated_transaction
         incomplete_transaction.tx_id = "test_tx_partial"
         incomplete_transaction.amount = 100.50
@@ -120,11 +132,15 @@ class TestDataIntegrityUnit:
         assert result.transaction.receiver_account is None
 
     @pytest.mark.asyncio
-    async def test_database_insert_failure(self, webhook_payload, mock_transaction_service):
+    async def test_database_insert_failure(
+        self, webhook_payload, mock_transaction_service
+    ):
         mock_transaction_service.find_one = AsyncMock(return_value=None)
 
         mock_transaction_instance = AsyncMock()
-        mock_transaction_instance.insert = AsyncMock(side_effect=Exception("Insert operation failed"))
+        mock_transaction_instance.insert = AsyncMock(
+            side_effect=Exception("Insert operation failed")
+        )
         mock_transaction_service.return_value = mock_transaction_instance
 
         with pytest.raises(DatabaseError) as exc_info:

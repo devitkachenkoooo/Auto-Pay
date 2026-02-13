@@ -73,7 +73,9 @@ def calculate_basic_metrics(transactions: List[Transaction]) -> dict:
         }
 
     total_amount = sum(tx.amount for tx in transactions)
-    successful_count = len([tx for tx in transactions if tx.status == "completed"])
+    successful_count = len(
+        [tx for tx in transactions if tx.status in ("success", "completed")]
+    )
     pending_count = len([tx for tx in transactions if tx.status == "pending"])
 
     metrics = {

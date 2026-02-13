@@ -12,3 +12,4 @@ python-dotenv
 taskipy
 pytest
 pytest-asyncio
+ruff

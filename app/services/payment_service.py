@@ -8,11 +8,19 @@ Fixes applied:
       (lets the exception hierarchy handle HTTP semantics cleanly)
 """
 
-from typing import Dict, Any
 from app.models import Transaction
 from app.schemas.transaction import WebhookPayload
-from app.schemas.responses import PaymentResponse, TransactionResponse, TransactionDetails
-from app.core.exceptions import PaymentValidationError, IdempotencyError, DatabaseError, NotFoundError
+from app.schemas.responses import (
+    PaymentResponse,
+    TransactionResponse,
+    TransactionDetails,
+)
+from app.core.exceptions import (
+    PaymentValidationError,
+    IdempotencyError,
+    DatabaseError,
+    NotFoundError,
+)
 import logging
 from pymongo.errors import DuplicateKeyError
 
@@ -51,7 +59,7 @@ class PaymentService:
                     success=True,
                     message="Transaction was previously processed",
                     status="duplicate",
-                    tx_id=payload.tx_id
+                    tx_id=payload.tx_id,
                 )
 
             # Create new transaction record
@@ -78,7 +86,7 @@ class PaymentService:
                 success=True,
                 message="Transaction stored successfully",
                 status="processed",
-                tx_id=payload.tx_id
+                tx_id=payload.tx_id,
             )
 
         except (IdempotencyError, PaymentValidationError):
@@ -86,9 +94,11 @@ class PaymentService:
             raise
         except DuplicateKeyError:
             raise IdempotencyError(payload.tx_id)
-        except Exception as e:
+        except Exception:
             # Log the full error internally but don't expose it to the client
-            logger.error(f"Database error processing transaction {payload.tx_id}", exc_info=True)
+            logger.error(
+                f"Database error processing transaction {payload.tx_id}", exc_info=True
+            )
             raise DatabaseError(
                 "Failed to process transaction",
                 operation="insert_transaction",
@@ -125,18 +135,20 @@ class PaymentService:
                 description=transaction.description,
                 timestamp=transaction.timestamp,
             )
-            
+
             return TransactionResponse(
                 success=True,
                 message="Transaction found successfully",
                 status="found",
-                transaction=transaction_details
+                transaction=transaction_details,
             )
 
         except NotFoundError:
             raise
-        except Exception as e:
-            logger.error(f"Database error retrieving transaction {tx_id}", exc_info=True)
+        except Exception:
+            logger.error(
+                f"Database error retrieving transaction {tx_id}", exc_info=True
+            )
             raise DatabaseError(
                 "Failed to retrieve transaction",
                 operation="find_transaction",

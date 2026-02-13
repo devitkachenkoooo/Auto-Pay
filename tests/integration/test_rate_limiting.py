@@ -56,9 +56,13 @@ def test_webhook_rate_limiting_5_per_second(payments_router, mock_hmac_secret):
         hashlib.sha256,
     ).hexdigest()
 
-    with patch("app.routes.payments.get_remote_address", return_value="9.9.9.9"), patch(
-        "time.time", return_value=1700000000.0
-    ), patch("app.services.payment_service.PaymentService.process_webhook") as mock_process:
+    with (
+        patch("app.routes.payments.get_remote_address", return_value="9.9.9.9"),
+        patch("time.time", return_value=1700000000.0),
+        patch(
+            "app.services.payment_service.PaymentService.process_webhook"
+        ) as mock_process,
+    ):
         from app.schemas.responses import PaymentResponse
 
         mock_process.return_value = PaymentResponse(

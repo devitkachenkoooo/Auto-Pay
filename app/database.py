@@ -69,7 +69,9 @@ async def init_db():
             "maxPoolSize": int(os.getenv("MONGO_MAX_POOL_SIZE", "10")),
             "minPoolSize": int(os.getenv("MONGO_MIN_POOL_SIZE", "2")),
             "maxIdleTimeMS": int(os.getenv("MONGO_MAX_IDLE_TIME_MS", "30000")),
-            "serverSelectionTimeoutMS": int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")),
+            "serverSelectionTimeoutMS": int(
+                os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")
+            ),
             "connectTimeoutMS": int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "10000")),
             "socketTimeoutMS": int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "45000")),
             "retryWrites": os.getenv("MONGO_RETRY_WRITES", "true").lower() == "true",
@@ -174,10 +176,11 @@ async def health_check() -> Dict[str, Any]:
         }
 
     except Exception as e:
+        logger.error("Database health check failed", exc_info=True)
         return {
             "status": "unhealthy",
             "database": "disconnected",
             "beanie": "not_initialized",
-            "error": str(e),
+            "error": "health_check_failed",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
