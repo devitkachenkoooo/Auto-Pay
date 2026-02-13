@@ -46,7 +46,7 @@ def test_description_sanitization():
         "currency": "USD",
         "sender_account": "ACC123",
         "receiver_account": "ACC456",
-        "description": 'Test <script>alert("XSS")</script> with \'quotes\' & ampersands; end.',
+        "description": "Test <script>alert(\"XSS\")</script> with 'quotes' & ampersands; end.",
     }
 
     payload = WebhookPayload(**malicious_payload)
@@ -57,7 +57,7 @@ def test_description_sanitization():
 
     # Test that description with only prohibited characters returns None
     empty_description_payload = malicious_payload.copy()
-    empty_description_payload["description"] = '<>"\';&'
+    empty_description_payload["description"] = "<>\"';&"
 
     payload_empty = WebhookPayload(**empty_description_payload)
     assert payload_empty.description is None

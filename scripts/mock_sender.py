@@ -7,6 +7,7 @@ import asyncio
 from dotenv import load_dotenv
 import os
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configuration
-WEBHOOK_URL = "http://localhost:8000/webhook"
+WEBHOOK_URL = "http://localhost:8001/payments/webhook"
 HMAC_SECRET = os.getenv("HMAC_SECRET_KEY")
 
 # Debug: Check if HMAC_SECRET is loaded
@@ -27,18 +28,20 @@ else:
     logger.info(f"HMAC_SECRET_KEY loaded successfully (length: {len(HMAC_SECRET)})")
 
 
-def generate_hmac_signature(payload: str, secret: str) -> str:
+def generate_hmac(timestamp: int, payload: str, secret: str) -> str:
     """
     Generate HMAC SHA256 signature for the payload
 
     Args:
+        timestamp: Unix timestamp
         payload: JSON string payload
         secret: HMAC secret key
 
     Returns:
         Hexadecimal signature
     """
-    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    signed_payload = f"{timestamp}.{payload}"
+    return hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
 
 
 def generate_transaction_payload() -> dict:
@@ -70,11 +73,18 @@ async def send_webhook(payload: dict):
     # Convert to JSON string
     payload_str = json.dumps(payload, separators=(",", ":"))
 
+    # Get current timestamp
+    timestamp = int(time.time())
+
     # Generate signature
-    signature = generate_hmac_signature(payload_str, HMAC_SECRET)
+    signature = generate_hmac(timestamp, payload_str, HMAC_SECRET)
 
     # Prepare headers
-    headers = {"Content-Type": "application/json", "X-Signature": signature}
+    headers = {
+        "Content-Type": "application/json",
+        "X-Timestamp": str(timestamp),
+        "X-Signature": signature
+    }
 
     # Send request
     async with httpx.AsyncClient() as client:
@@ -96,38 +106,81 @@ async def send_webhook(payload: dict):
             return None
 
 
-async def simulate_payment_flow():
+async def run_test_scenarios():
     """
-    Simulate various payment scenarios
+    Run specific advanced testing scenarios
     """
-    scenarios = [
-        ("Valid Transaction", generate_transaction_payload()),
-        ("Duplicate Transaction", None),  # Will reuse first transaction
-        ("Invalid Signature", None),  # Will use wrong signature
-        ("Another Valid Transaction", generate_transaction_payload()),
+    test_cases = [
+        {
+            "name": "Case 1: Success Path",
+            "payload": generate_transaction_payload(),
+            "expected_status": 200,
+            "description": "Valid data, valid signature"
+        },
+        {
+            "name": "Case 2: Security Breach (Invalid Signature)",
+            "payload": generate_transaction_payload(),
+            "expected_status": 401,
+            "description": "Valid payload but with hardcoded 'fake_sig'",
+            "force_signature": "fake_sig"
+        },
+        {
+            "name": "Case 3: XSS Attack (Sanitization Test)",
+            "payload": {
+                "tx_id": f"tx_{uuid.uuid4().hex[:12]}",
+                "amount": 100.00,
+                "currency": "USD",
+                "sender_account": f"ACC{uuid.uuid4().hex[:8].upper()}",
+                "receiver_account": f"ACC{uuid.uuid4().hex[:8].upper()}",
+                "description": "<script>alert('xss')</script> Test payment"
+            },
+            "expected_status": 200,
+            "description": "Description containing script tags"
+        },
+        {
+            "name": "Case 4: Business Rule Violation",
+            "payload": {
+                "tx_id": f"tx_{uuid.uuid4().hex[:12]}",
+                "amount": 50.00,
+                "currency": "USD",
+                "sender_account": "SAME_ACC_123",
+                "receiver_account": "SAME_ACC_123",
+                "description": "Same sender and receiver test"
+            },
+            "expected_status": 422,
+            "description": "sender_account equals receiver_account"
+        },
+        {
+            "name": "Case 5: Precision Test",
+            "payload": {
+                "tx_id": f"tx_{uuid.uuid4().hex[:12]}",
+                "amount": 100.555,
+                "currency": "USD",
+                "sender_account": f"ACC{uuid.uuid4().hex[:8].upper()}",
+                "receiver_account": f"ACC{uuid.uuid4().hex[:8].upper()}",
+                "description": "Test with 3 decimal places"
+            },
+            "expected_status": 422,
+            "description": "Amount with 3 decimal places"
+        }
     ]
 
-    first_tx_id = None
+    for case in test_cases:
+        logger.info(f"\n=== {case['name']} ===")
+        logger.info(f"Description: {case['description']}")
 
-    for scenario_name, payload in scenarios:
-        logger.info(f"\n=== {scenario_name} ===")
+        payload = case["payload"]
+        expected_status = case["expected_status"]
 
-        if scenario_name == "Duplicate Transaction" and first_tx_id:
-            # Reuse the first transaction to test idempotency
-            payload = generate_transaction_payload()
-            payload["tx_id"] = first_tx_id
-
-        elif scenario_name == "Invalid Signature":
-            # Generate valid payload but wrong signature
-            payload = generate_transaction_payload()
+        # Send request
+        if "force_signature" in case:
+            # Special case for invalid signature
             payload_str = json.dumps(payload, separators=(",", ":"))
-            wrong_signature = hmac.new(
-                "wrong_secret".encode(), payload_str.encode(), hashlib.sha256
-            ).hexdigest()
-
+            timestamp = int(time.time())
             headers = {
                 "Content-Type": "application/json",
-                "X-Signature": wrong_signature,
+                "X-Timestamp": str(timestamp),
+                "X-Signature": case["force_signature"]
             }
 
             async with httpx.AsyncClient() as client:
@@ -135,18 +188,30 @@ async def simulate_payment_flow():
                     response = await client.post(
                         WEBHOOK_URL, data=payload_str, headers=headers, timeout=10.0
                     )
-                    logger.info(f"Status: {response.status_code}")
-                    logger.info(f"Response: {response.json()}")
+                    status_code = response.status_code
+                    response_data = response.json()
                 except Exception as e:
                     logger.error(f"Request failed: {str(e)}")
+                    status_code = None
+                    response_data = None
+        else:
+            response = await send_webhook(payload)
+            if response:
+                status_code = response.status_code
+                response_data = response.json()
+            else:
+                status_code = None
+                response_data = None
 
-            continue
+        # Check result
+        if status_code == expected_status:
+            logger.info("PASS")
+        else:
+            logger.info("FAIL")
+            logger.info(f"Expected status: {expected_status}, Got: {status_code}")
 
-        # Send normal webhook
-        response = await send_webhook(payload)
-
-        if response and response.status_code == 200 and not first_tx_id:
-            first_tx_id = payload["tx_id"]
+        if response_data:
+            logger.info(f"Response: {response_data}")
 
         # Small delay between requests
         await asyncio.sleep(1)
@@ -160,7 +225,7 @@ async def main():
     logger.info(f"Target URL: {WEBHOOK_URL}")
 
     try:
-        await simulate_payment_flow()
+        await run_test_scenarios()
         logger.info("\nMock sender completed successfully")
     except KeyboardInterrupt:
         logger.info("\nMock sender interrupted")

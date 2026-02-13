@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request
 from app.schemas.transaction import WebhookPayload
 from app.security import verify_hmac_signature
 from app.services.payment_service import PaymentService
+from app.core.limiter import limiter
 from slowapi.util import get_remote_address
 import logging
 
@@ -20,26 +21,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# Get the limiter from app state
-def get_limiter(request: Request):
-    """Get rate limiter from app state"""
-    return request.app.state.limiter
-
-
 @router.post("/webhook", dependencies=[Depends(verify_hmac_signature)])
+@limiter.limit("30/minute", key_func=get_remote_address)
 async def process_payment(request: Request, payload: WebhookPayload):
     """Main webhook endpoint for processing payments."""
-    # Retrieve the limiter from the app state
-    limiter = get_limiter(request)
-
-    # We use a 30/minute limit here to stay generous for the full test suite
-    # while still providing protection. The specific rate limiting test will
-    # override this behavior by using a separate app with a 5/minute default limit.
-    @limiter.limit("30/minute", key_func=get_remote_address)
-    async def handle_request(request: Request):
-        return await PaymentService.process_webhook(payload)
-
-    return await handle_request(request)
+    return await PaymentService.process_webhook(payload)
 
 
 @router.get("/transaction/{tx_id}")

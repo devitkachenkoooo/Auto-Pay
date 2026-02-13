@@ -17,9 +17,9 @@ from app.routes.payments import router as payments_router
 from app.core.handlers import setup_exception_handlers
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.monitoring import setup_monitoring, error_monitor, monitor_errors
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from app.core.limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 import hmac
@@ -84,7 +84,6 @@ app = FastAPI(
 )
 
 # Initialize rate limiter (single instance, shared via app.state)
-limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
 app.state.limiter = limiter
 
 # Add global exception handler for rate limit exceeded
@@ -100,7 +99,7 @@ setup_exception_handlers(app)
 app.add_middleware(RequestLoggingMiddleware)
 
 # Include payment routes
-app.include_router(payments_router)
+app.include_router(payments_router, prefix="/payments")
 
 
 @app.get("/")
